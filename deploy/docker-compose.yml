@@ -1,0 +1,131 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-admin}
+      POSTGRES_PASSWORD: ${DB_PASS:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
+    networks:
+      - overengineering_net
+
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:latest
+    container_name: redpanda
+    command:
+      - redpanda start
+      - --overprovisioned
+      - --smp 1
+      - --memory 1G
+      - --reserve-memory 0M
+      - --node-id 0
+      - --check=false
+      - --kafka-addr PLAINTEXT://0.0.0.0:29092,OUTSIDE://0.0.0.0:9092
+      - --advertise-kafka-addr PLAINTEXT://redpanda:29092,OUTSIDE://localhost:9092
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    networks:
+      - overengineering_net
+
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:latest
+    container_name: redpanda_console
+    environment:
+      - KAFKA_BROKERS=redpanda:29092
+    ports:
+      - "8082:8080"
+    depends_on:
+      - redpanda
+    networks:
+      - overengineering_net
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - overengineering_net
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_LOG_LEVEL=warn
+    depends_on:
+      - loki
+    networks:
+      - overengineering_net
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: apps/auth-service/Dockerfile
+    container_name: auth_service
+    restart: always
+    environment:
+      - GIN_MODE=release
+      - DB_URL=postgres://${DB_USER:-admin}:${DB_PASS:-password}@postgres:5432/auth_db
+      - PRIVATE_KEY_PATH=/app/certs/private.pem
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../certs:/app/certs:ro
+    depends_on:
+      - postgres
+      - loki
+    networks:
+      - overengineering_net
+
+  order-service:
+    build:
+      context: ..
+      dockerfile: apps/order-service/Dockerfile
+    container_name: order_service
+    restart: on-failure
+    environment:
+      - GIN_MODE=${GIN_MODE:-release}
+      - APP_PORT=${ORDER_PORT:-8081}
+      - DB_URL=postgres://${DB_USER:-admin}:${DB_PASS:-password}@postgres:5432/order_db
+      - KAFKA_BROKERS=redpanda:29092
+    ports:
+      - "${ORDER_PORT:-8081}:${ORDER_PORT:-8081}"
+    depends_on:
+      - postgres
+      - loki
+      - redpanda
+    networks:
+      - overengineering_net
+
+  wso2-mi:
+    image: wso2/micro-integrator:latest
+    container_name: wso2_mi
+    ports:
+      - "8290:8290"
+      - "8253:8253"
+      - "9164:9164"
+    volumes:
+      - ../integration/wso2-artifacts:/home/wso2carbon/wso2mi/repository/deployment/server/carbonapps
+    depends_on:
+      - order-service
+      - auth-service
+    networks:
+      - overengineering_net
+
+networks:
+  overengineering_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
