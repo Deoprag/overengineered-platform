@@ -43,6 +43,7 @@ data/               # Pasta onde o Postgres vai persistir dados localmente
 .classpath
 .settings/
 target/
+certs/
 *.car
 
 # OS
