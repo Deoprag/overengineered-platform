@@ -1,20 +1,20 @@
-# Estágio de Build
-FROM alpine:3.18 AS builder
-RUN apk add --no-cache go
+FROM golang:1.25-alpine AS builder
+
+RUN apk add --no-cache git
+
 WORKDIR /app
 
-# Copia o workspace e os módulos
-COPY go.work go.work.sum ./
+COPY go.work go.work.sum* ./
 COPY apps/order-service/go.mod apps/order-service/go.sum ./apps/order-service/
+COPY apps/auth-service/go.mod apps/auth-service/go.sum ./apps/auth-service/
+
 RUN go mod download -C apps/order-service
 
-# Copia o código e compila
 COPY apps/order-service/ ./apps/order-service/
-RUN go build -o order-api ./apps/order-service/main.go
 
-# Estágio Final (Leve)
+RUN go build -o order-service ./apps/order-service/main.go
+
 FROM alpine:3.18
-WORKDIR /root/
-COPY --from=builder /app/order-api .
-EXPOSE 8081
-CMD ["./order-api"]
+WORKDIR /app
+COPY --from=builder /app/order-service .
+CMD ["./order-service"]

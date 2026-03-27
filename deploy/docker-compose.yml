@@ -5,7 +5,7 @@ services:
     restart: always
     environment:
       POSTGRES_USER: ${DB_USER:-admin}
-      POSTGRES_PASSWORD: ${DB_PASS:-password}
+      POSTGRES_PASSWORD: ${DB_PASS:-admin}
     ports:
       - "5432:5432"
     volumes:
@@ -76,10 +76,11 @@ services:
     restart: always
     environment:
       - GIN_MODE=release
+      - APP_PORT=${ORDER_PORT:-8080}
       - DB_URL=postgres://${DB_USER:-admin}:${DB_PASS:-password}@postgres:5432/auth_db
       - PRIVATE_KEY_PATH=/app/certs/private.pem
     ports:
-      - "8080:8080"
+      - "${ORDER_PORT:-8080}:${ORDER_PORT:-8080}"
     volumes:
       - ../certs:/app/certs:ro
     depends_on:

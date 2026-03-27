@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"time"
@@ -33,16 +34,12 @@ func main() {
 	defer func(logger *zap.Logger) {
 		err := logger.Sync()
 		if err != nil {
-			logger.Fatal("Failed to sync logger", zap.Error(err))
-			return
+			fmt.Printf("ERRO CRITICAL: Não conseguiu iniciar o Zap Logger: %v\n", err)
+			os.Exit(1)
 		}
 	}(logger)
 
-	pool, err := pgxpool.New(context.Background(), os.Getenv("DB_URL"))
-	if err != nil {
-		logger.Fatal("DB Error", zap.Error(err))
-		return
-	}
+	pool, err := connectDB(context.Background(), os.Getenv("DB_URL"), logger)
 
 	kw := &kafka.Writer{
 		Addr:                   kafka.TCP(os.Getenv("KAFKA_BROKERS")),
@@ -59,13 +56,31 @@ func main() {
 
 	r.POST("/vi/orders", app.createOrder)
 
-	err = r.Run(":" + os.Getenv("ORDER_SERVICE_PORT"))
+	err = r.Run(":" + os.Getenv("APP_PORT"))
 	if err != nil {
 		logger.Fatal("Error while starting server", zap.Error(err))
 		return
 	}
+}
 
-	logger.Info("Order Service is running...", zap.String("port", os.Getenv("ORDER_SERVICE_PORT")))
+func connectDB(ctx context.Context, connString string, logger *zap.Logger) (*pgxpool.Pool, error) {
+	var pool *pgxpool.Pool
+	var err error
+
+	for i := range 5 {
+		pool, err = pgxpool.New(ctx, connString)
+		if err == nil {
+			err = pool.Ping(ctx)
+			if err == nil {
+				return pool, nil
+			}
+		}
+
+		logger.Info("Awaiting Postgres...", zap.Int("retry", i+1))
+		time.Sleep(2 * time.Second)
+	}
+
+	return nil, err
 }
 
 func (a *App) createOrder(c *gin.Context) {

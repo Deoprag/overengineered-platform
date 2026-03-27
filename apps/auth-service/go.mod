@@ -1,6 +1,6 @@
 module overengineered-platform/apps/auth-service
 
-go 1.26.1
+go 1.25
 
 require (
 	github.com/bytedance/gopkg v0.1.3 // indirect

@@ -20,6 +20,19 @@ GRANT ALL PRIVILEGES ON DATABASE
     inventory_db TO inventory_user;
 
 \c auth_db;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+CREATE TABLE IF NOT EXISTS users
+(
+    id            UUID PRIMARY KEY         DEFAULT gen_random_uuid(),
+    username      VARCHAR(50) UNIQUE NOT NULL,
+    password_hash TEXT               NOT NULL,
+    created_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO users (username, password_hash)
+VALUES ('admin', '$argon2id$v=19$m=65536,t=3,p=2$IbGyGjs+chGN1qadii7rNw$OfLJrKnQ5NkioS+xZe4RW3cPEiqDu8ry08k2YU8tbEo')
+ON CONFLICT DO NOTHING;
 
 \c order_db;
 CREATE TYPE status_enum AS ENUM
